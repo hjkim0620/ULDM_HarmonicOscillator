@@ -11,7 +11,7 @@ from tqdm.notebook import tqdm
 from scipy.interpolate import RegularGridInterpolator, interpn
 
 class ULDM_Simulator():
-    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-1):
+    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
         '''
         dist(str)       : Distribution type
         L   (scalar)    : Length of the box
@@ -34,7 +34,7 @@ class ULDM_Simulator():
 
         self.N = N 
         self.L = L
-        self.dx = L/N
+        self.dx = L / N
 
         # Set up the spatial grid
         self.coordinate = (
@@ -60,7 +60,7 @@ class ULDM_Simulator():
 
         # 1 / k^2
         self.K2 = self.KX**2 + self.KY**2 + self.KZ**2
-        self.invK2 = np.divide(1, self.K2, out=np.zeros((self.N, self.N, self.N)), where=(self.K2 !=0))
+        self.invK2 = np.divide(1, self.K2, out=np.zeros((self.N, self.N, self.N)), where=(self.K2 != 0))
     
     def set_steps(self):
         self.T = self.L**2 / np.pi
@@ -74,20 +74,20 @@ class ULDM_Simulator():
         dist (str): Distribution type
         '''
         if dist == 'Iso_Gaussian':
-            return lambda k: (2*np.pi)**1.5 * np.exp(-k**2 / 2)
+            return lambda k: (2 * np.pi)**1.5 * np.exp(-k**2 / 2)
         
     def set_initial_wavefunction(self):
         self.farr = self.f(np.sqrt(self.KX**2 + self.KY**2 + self.KZ**2))
 
-        PSI = np.random.rayleigh(1)
+        PSI = np.random.rayleigh(size=self.farr.shape).astype('complex128')
         PSI *= 1 / self.L**1.5
         PSI *= np.exp(2j * np.pi * np.random.rand(self.N, self.N, self.N))
         PSI *= np.sqrt(self.farr / 2)
         
         self.psi = ifftn(PSI, norm='forward')                       
-        self.rhob = self.N**(-3) * np.sum(np.abs(self.psi)**2)    # average density
+        self.rhob = np.mean(np.abs(self.psi)**2)    # average density
 
-        self.Phi_fourier = fftn(-(self.kJ**4 / 4) * (np.abs(self.psi)**2 - self.rhob)) * self.invK2
+        self.Phi_fourier = -(self.kJ**4 / 4) * fftn((np.abs(self.psi)**2 - self.rhob)) * self.invK2
         self.Phi = np.real(ifftn(self.Phi_fourier))
 
     def evolve(self):
