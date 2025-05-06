@@ -112,3 +112,69 @@ class ULDM_Simulator():
             for i, _ in enumerate(tqdm(self.time)):
                 self.rho[i] = (np.abs(self.psi)**2)[0,0,0]
                 self.evolve()
+
+class ULDM_FreeParticle(ULDM_Simulator):
+    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
+        super().__init__(dist=dist, L=L, N=N, kJ=kJ)
+        self.set_initial_kinematics()
+
+    def set_initial_kinematics(self):
+        self.grid = np.linspace(-self.L/2, self.L/2, self.N)
+
+        self.ax = np.real(ifftn(-1j * self.KX * self.Phi_fourier))
+        self.ay = np.real(ifftn(-1j * self.KY * self.Phi_fourier))
+        self.az = np.real(ifftn(-1j * self.KZ * self.Phi_fourier))
+
+        self.pos = np.array([0, 0, 0])
+        self.vel = np.array([0, 0, 0])
+        self.acc = np.array([interpn(self.coordinate, self.ax, self.pos)[0],
+                             interpn(self.coordinate, self.ay, self.pos)[0],
+                             interpn(self.coordinate, self.az, self.pos)[0]])
+        
+    # THIS OVERRIDES evolve METHOD IN PARENT CLASS
+    def evolve(self):
+        '''
+        Evolve field according to kick-drift-kick scheme
+        Evolve particle according to drift-kick-drift (leapfrog)
+        '''
+        
+        # Initial kick - drift sequence
+        self.psi *= np.exp(-0.5j * self.Phi * self.dt)
+        self.psi = fftn(self.psi)
+        self.psi *= np.exp(-0.5j * self.K2 * self.dt)   
+        self.psi = ifftn(self.psi)
+
+        # Update Phi and acceleration
+        self.rhob = self.N**(-3) * np.sum(np.abs(self.psi)**2)
+        
+        self.Phi_fourier = fftn(-(self.kJ**4 / 4) * (np.abs(self.psi)**2 - self.rhob)) * self.invK2
+        self.Phi = np.real(ifftn(self.Phi_fourier))
+        
+        self.ax = np.real(ifftn(-1j * self.KX * self.Phi_fourier))
+        self.ay = np.real(ifftn(-1j * self.KY * self.Phi_fourier))
+        self.az = np.real(ifftn(-1j * self.KZ * self.Phi_fourier))
+        
+        self.psi *= np.exp(-0.5j * self.Phi * self.dt)
+
+        # Free particle evolution
+        self.pos = self.pos + 0.5 * self.vel * self.dt
+        self.acc = np.array([interpn(self.coordinate, self.ax, self.pos)[0],
+                             interpn(self.coordinate, self.ay, self.pos)[0],
+                             interpn(self.coordinate, self.az, self.pos)[0]])
+        self.vel = self.vel + self.acc * self.dt
+        self.pos = self.pos + 0.5 * self.vel * self.dt
+
+    # THIS OVERRIDES solve METHOD IN PARENT CLASS
+    def solve(self, save=True):
+        if save == True:
+            self.rho = np.zeros(len(self.time))
+            self.pos_arr = np.zeros((len(self.time), 3))
+            self.vel_arr = np.zeros((len(self.time), 3))
+            self.acc_arr = np.zeros((len(self.time), 3))
+
+            for i, _ in enumerate(tqdm(self.time)):
+                self.rho[i] = (np.abs(self.psi)**2)[0,0,0]
+                self.pos_arr[i] = self.pos
+                self.vel_arr[i] = self.vel
+                self.acc_arr[i] = self.acc
+                self.evolve()
