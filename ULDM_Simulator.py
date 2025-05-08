@@ -165,14 +165,19 @@ class ULDM_FreeParticle(ULDM_Simulator):
         self.pos = self.pos + 0.5 * self.vel * self.dt
 
     # THIS OVERRIDES solve METHOD IN PARENT CLASS
-    def solve(self, save=True):
+    def solve(self, save=True, progress=True):
+        if progress:
+            ite = tqdm(self.time)
+        else:
+            ite = self.time
+
         if save == True:
             self.rho = np.zeros(len(self.time))
             self.pos_arr = np.zeros((len(self.time), 3))
             self.vel_arr = np.zeros((len(self.time), 3))
             self.acc_arr = np.zeros((len(self.time), 3))
 
-            for i, _ in enumerate(tqdm(self.time)):
+            for i, _ in enumerate(ite):
                 self.rho[i] = (np.abs(self.psi)**2)[0,0,0]
                 self.pos_arr[i] = self.pos
                 self.vel_arr[i] = self.vel
