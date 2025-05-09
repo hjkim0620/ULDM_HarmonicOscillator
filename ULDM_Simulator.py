@@ -3,6 +3,7 @@ import scipy
 import timeit
 import pyfftw
 import numpy as np 
+import matplotlib.pyplot as plt
 
 from scipy.fft import fftfreq, fftn, ifftn
 from matplotlib import animation
@@ -11,6 +12,9 @@ from tqdm.notebook import tqdm
 from scipy.interpolate import RegularGridInterpolator, interpn
 
 class ULDM_Simulator():
+    '''
+    Schrodinger-Poisson Solver
+    '''
     def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
         '''
         dist(str)       : Distribution type
@@ -113,7 +117,13 @@ class ULDM_Simulator():
                 self.rho[i] = (np.abs(self.psi)**2)[0,0,0]
                 self.evolve()
 
+
+
 class ULDM_FreeParticle(ULDM_Simulator):
+    '''
+    Schrodinger-Poisson Solver
+    + Free Particle Evolution
+    '''
     def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
         super().__init__(dist=dist, L=L, N=N, kJ=kJ)
         self.set_initial_kinematics()
@@ -183,3 +193,79 @@ class ULDM_FreeParticle(ULDM_Simulator):
                 self.vel_arr[i] = self.vel
                 self.acc_arr[i] = self.acc
                 self.evolve()
+
+class Plotting:
+    '''
+    TODO 
+    1. Complete implementation of spectrum plotting method
+    2. 
+    '''
+    def __init__(self, sim: ULDM_Simulator):
+        self.sim = sim
+    
+    def rho_plot(self, thinning=4, savefig_loc=None):
+        '''
+        Plot rho and its distribution
+        Compare with exponential distribution
+
+        Input
+            thinning    (scalar)    thin the array of rho
+            savefig_loc (str)       fig save location
+        '''
+        fig, ax = plt.subplots(ncols=2, figsize=(9,4))
+
+        ax[0].plot(self.sim.time, self.sim.rho)
+        ax[0].set_xlabel(r'$t/\tau$');
+        ax[0].set_ylabel(r'$\rho/\bar\rho$');
+
+        ax[1].hist(self.sim.rho[::thinning],
+                   density=True,
+                   bins=20,
+                   alpha=0.5)
+
+        rho_arr = np.arange(0,10,0.1)
+        ax[1].plot(rho_arr, np.exp(-rho_arr),
+                   linewidth=3,
+                   alpha=0.8,
+                   label=r'$(1/\bar\rho)\exp(-\rho/\bar\rho)$')
+
+        ax[1].set_xlim(0, 6)
+        ax[1].set_ylim(1e-2, 3)
+        ax[1].set_yscale('log')
+
+        ax[1].set_xlabel(r'$\rho/\bar\rho$');
+        ax[1].set_ylabel(r'$p(\rho |\bar\rho)$');
+        ax[1].legend()
+
+        fig.tight_layout()
+        if savefig_loc:
+            fig.savefig(savefig_loc)
+
+        return fig
+    
+    # def PS_plot(self, 
+    #             window=[True,False],
+    #             each=[False,False],
+    #             subtracted=False,
+    #             savefig_loc=None):
+    #     '''
+    #     Plot Power Spectrum and
+    #     Compare with analytic result
+    #     '''
+        
+    #     wd = np.sin(np.pi * self.time / self.T)**8 * (128/35)
+    #     wd = wd[:, None]
+        
+    #     if window[0]:    
+    #         pos_wd = self.sim.pos_arr * wd
+    #     if window[1]:
+    #         acc_wd = self.sim.acc_arr * wd
+
+
+    #     fig, ax = plt.subplots(ncols=2, figsize=(9,4))
+
+    #     fig.tight_layout()
+    #     if savefig_loc:
+    #         fig.savefig(savefig_loc)
+
+    #     return fig
