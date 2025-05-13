@@ -15,7 +15,7 @@ class ULDM_Simulator():
     '''
     Schrodinger-Poisson Solver
     '''
-    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
+    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3, compute_acc=False):
         '''
         dist(str)       : Distribution type
         L   (scalar)    : Length of the box
@@ -28,7 +28,7 @@ class ULDM_Simulator():
         self.set_steps()
     
         self.f = self.set_distribution(dist)    
-        self.set_initial_wavefunction()
+        self.set_initial_wavefunction(compute_acc)
     
     def set_grid(self, L: float, N: float):
         '''
@@ -80,7 +80,7 @@ class ULDM_Simulator():
         if dist == 'Iso_Gaussian':
             return lambda k: (2 * np.pi)**1.5 * np.exp(-k**2 / 2)
         
-    def set_initial_wavefunction(self):
+    def set_initial_wavefunction(self, compute_acc=False):
         self.farr = self.f(np.sqrt(self.KX**2 + self.KY**2 + self.KZ**2))
 
         PSI = np.random.rayleigh(size=self.farr.shape).astype('complex128')
@@ -93,6 +93,13 @@ class ULDM_Simulator():
 
         self.Phi_fourier = -(self.kJ**4 / 4) * fftn((np.abs(self.psi)**2 - self.rhob)) * self.invK2
         self.Phi = np.real(ifftn(self.Phi_fourier))
+        
+        if compute_acc:
+            self.uldm_acc = [
+                np.real(ifftn(-1j * self.KX * self.Phi_fourier)),
+                np.real(ifftn(-1j * self.KY * self.Phi_fourier)),
+                np.real(ifftn(-1j * self.KZ * self.Phi_fourier))
+            ]
 
     def evolve(self):
         '''
