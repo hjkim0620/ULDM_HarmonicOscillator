@@ -200,79 +200,128 @@ class ULDM_FreeParticle(ULDM_Simulator):
                 self.vel_arr[i] = self.vel
                 self.acc_arr[i] = self.acc
                 self.evolve()
+                
+class ULDM_HarmonicOscillator(ULDM_Simulator):
+    '''
+    Schrodinger-Poisson Solver
+    + Harmonic force along 1D / Free in another 2D
+    '''
+    def __init__(self, f_osc, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3):
+        super().__init__(dist=dist, L=L, N=N, kJ=kJ)
+        self.f_osc = f_osc
+        self.set_initial_kinematics()
+        self.time = np.arange(0, self.T, self.dt)
 
-class Plotting:
-    '''
-    TODO 
-    1. Complete implementation of spectrum plotting method
-    2. 
-    '''
-    def __init__(self, sim: ULDM_Simulator):
-        self.sim = sim
-    
-    def rho_plot(self, thinning=4, savefig_loc=None):
+    def set_initial_kinematics(self):
+        self.grid = np.linspace(-self.L/2, self.L/2, self.N)
+
+        self.ax = np.real(ifftn(-1j * self.KX * self.Phi_fourier))
+        self.ay = np.real(ifftn(-1j * self.KY * self.Phi_fourier))
+        self.az = np.real(ifftn(-1j * self.KZ * self.Phi_fourier))
+
+        self.pos = np.array([1, 0, 0])
+        self.vel = np.array([0, 0, 0])
+
+        self.acc = np.array([interpn(self.coordinate, self.ax, self.pos)[0] - (2 * np.pi * self.f_osc)**2 * self.pos[0],
+                             interpn(self.coordinate, self.ay, self.pos)[0],
+                             interpn(self.coordinate, self.az, self.pos)[0]])
+
+    # THIS OVERRIDES evolve METHOD IN PARENT CLASS
+    def evolve(self):
         '''
-        Plot rho and its distribution
-        Compare with exponential distribution
+        Evolve field according to kick-drift-kick scheme
+        Evolve particle according to drift-kick-drift (leapfrog)
+        '''
+        
+        # Initial kick - drift sequence
+        self.psi *= np.exp(-0.5j * self.Phi * self.dt)
+        self.psi = fftn(self.psi)
+        self.psi *= np.exp(-0.5j * self.K2 * self.dt)   
+        self.psi = ifftn(self.psi)
 
+        # Update Phi and acceleration
+        self.rhob = self.N**(-3) * np.sum(np.abs(self.psi)**2)
+        
+        self.Phi_fourier = fftn(-(self.kJ**4 / 4) * (np.abs(self.psi)**2 - self.rhob)) * self.invK2
+        self.Phi = np.real(ifftn(self.Phi_fourier))
+        
+        self.ax = np.real(ifftn(-1j * self.KX * self.Phi_fourier))
+        self.ay = np.real(ifftn(-1j * self.KY * self.Phi_fourier))
+        self.az = np.real(ifftn(-1j * self.KZ * self.Phi_fourier))
+        
+        self.psi *= np.exp(-0.5j * self.Phi * self.dt)
+        
+        def force(pos):
+            return np.array([interpn(self.coordinate, self.ax, pos)[0],
+                             interpn(self.coordinate, self.ay, pos)[0],
+                             interpn(self.coordinate, self.az, pos)[0]]) + self.harmonic_force(pos)
+
+        # For free particle evolution
+        self.pos, self.vel, self.acc = self.yoshida(self.pos, self.vel, force)
+        
+    def leapfrog(self, pos, vel, force):
+        '''
+        Leapfrog integrator
+        '''
+        dt = self.dt
+        
+        x = pos + 0.5 * vel * dt
+        v = vel + force(x) * dt
+        x = x + 0.5 * v * dt
+
+        return x, v, force(x)
+
+    def yoshida(self, pos, vel, force):
+        '''
+        4th order Yoshida integrator
+        '''
+        dt = self.dt
+
+        w0 = - 2**(1 / 3) / (2 - 2**(1 / 3))
+        w1 = 1 / (2 - 2**(1/3))
+        c1 = c4 = w1 / 2
+        c2 = c3 = (w0 + w1) / 2
+        d1 = d3 = w1
+        d2 = w0
+
+        x1 = pos + c1 * vel * dt
+        v1 = vel + d1 * force(x1) * dt
+        
+        x2 = x1 + c2 * v1 * dt
+        v2 = v1 + d2 * force(x2) * dt
+        
+        x3 = x2 + c3 * v2 * dt
+        v3 = v2 + d3 * force(x3) * dt
+
+        x4 = x3 + c4 * v3 * dt
+        v4 = v3
+
+        return x4, v4, force(x4)
+
+    def harmonic_force(self, pos):
+        return np.array([-(2 * np.pi * self.f_osc)**2 * pos[0], 0, 0])
+
+    # THIS OVERRIDES solve METHOD IN PARENT CLASS
+    def solve(self, save=True):
+        if save == True:
+            self.rho = np.zeros(len(self.time))
+            self.pos_arr = np.zeros((len(self.time), 3))
+            self.vel_arr = np.zeros((len(self.time), 3))
+            self.acc_arr = np.zeros((len(self.time), 3))
+
+            for i, _ in enumerate(tqdm(self.time)):
+                self.rho[i] = (np.abs(self.psi)**2)[0,0,0]
+                self.pos_arr[i] = self.pos
+                self.vel_arr[i] = self.vel
+                self.acc_arr[i] = self.acc
+                self.evolve()
+
+    def subtract(self, truth=True):
+        '''
+        Subtracting motion due to haronic force
         Input
-            thinning    (scalar)    thin the array of rho
-            savefig_loc (str)       fig save location
+            truth (bool)    if true, subtraction done by prior knowledge of injected force
         '''
-        fig, ax = plt.subplots(ncols=2, figsize=(9,4))
-
-        ax[0].plot(self.sim.time, self.sim.rho)
-        ax[0].set_xlabel(r'$t/\tau$');
-        ax[0].set_ylabel(r'$\rho/\bar\rho$');
-
-        ax[1].hist(self.sim.rho[::thinning],
-                   density=True,
-                   bins=20,
-                   alpha=0.5)
-
-        rho_arr = np.arange(0,10,0.1)
-        ax[1].plot(rho_arr, np.exp(-rho_arr),
-                   linewidth=3,
-                   alpha=0.8,
-                   label=r'$(1/\bar\rho)\exp(-\rho/\bar\rho)$')
-
-        ax[1].set_xlim(0, 6)
-        ax[1].set_ylim(1e-2, 3)
-        ax[1].set_yscale('log')
-
-        ax[1].set_xlabel(r'$\rho/\bar\rho$');
-        ax[1].set_ylabel(r'$p(\rho |\bar\rho)$');
-        ax[1].legend()
-
-        fig.tight_layout()
-        if savefig_loc:
-            fig.savefig(savefig_loc)
-
-        return fig
-    
-    # def PS_plot(self, 
-    #             window=[True,False],
-    #             each=[False,False],
-    #             subtracted=False,
-    #             savefig_loc=None):
-    #     '''
-    #     Plot Power Spectrum and
-    #     Compare with analytic result
-    #     '''
-        
-    #     wd = np.sin(np.pi * self.time / self.T)**8 * (128/35)
-    #     wd = wd[:, None]
-        
-    #     if window[0]:    
-    #         pos_wd = self.sim.pos_arr * wd
-    #     if window[1]:
-    #         acc_wd = self.sim.acc_arr * wd
-
-
-    #     fig, ax = plt.subplots(ncols=2, figsize=(9,4))
-
-    #     fig.tight_layout()
-    #     if savefig_loc:
-    #         fig.savefig(savefig_loc)
-
-    #     return fig
+        if truth:
+            self.x_sub = self.pos_arr[:,0] - np.cos(2 * np.pi * self.f_osc * self.time)
+            self.a_sub = self.acc_arr[:,0] + (2 * np.pi * self.f_osc)**2 * self.pos_arr[:,0]
