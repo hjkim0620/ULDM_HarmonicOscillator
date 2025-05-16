@@ -80,7 +80,7 @@ class ULDM_Simulator():
         if dist == 'Iso_Gaussian':
             return lambda k: (2 * np.pi)**1.5 * np.exp(-k**2 / 2)
         
-    def set_initial_wavefunction(self, compute_acc=False):
+    def set_initial_wavefunction(self, compute_acc):
         self.farr = self.f(np.sqrt(self.KX**2 + self.KY**2 + self.KZ**2))
 
         PSI = np.random.rayleigh(size=self.farr.shape).astype('complex128')
