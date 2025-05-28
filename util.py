@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.special import k0, k1
 from scipy.fft import fftfreq, fftn, ifftn, rfftn, rfftfreq
 
 def compute_acc(x: list[float], n: int, dt: float, wd: bool=False):
@@ -78,3 +79,26 @@ def compute_acc_PS(x: list[float], dt: float, wd: bool=False, n=2):
 
     a = compute_acc(x, n, dt, wd)
     return compute_PS(a, dt, wd)
+
+def Sa(f: list[float], kJ=1e-3, tau=1) -> list[float]:
+    '''
+    Analytic spectrum S_a(f)
+    Input
+        f (ndarray (n,))    frequency array
+    '''
+    # In this simulation we measure time in coherence time
+    # and frequency in inverse of coherence time
+    
+    return (kJ**8 / 16) * k0(np.abs(2 * np.pi * f * tau)) * tau / 3
+
+def Sx(f: list[float], kJ=1e-3, tau=1) -> list[float]:
+    '''
+    Analytic spectrum S_x(f)
+    Input
+        f (ndarray (n,))    frequency array
+    '''
+
+    # In this simulation we measure time in coherence time
+    # and frequency in inverse of coherence time
+    
+    return Sa(f, kJ=kJ, tau=tau) / (2 * np.pi * f * tau)**4
