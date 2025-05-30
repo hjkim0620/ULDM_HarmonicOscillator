@@ -15,14 +15,16 @@ class ULDM_Simulator():
     '''
     Schrodinger-Poisson Solver
     '''
-    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3, compute_acc=False):
+    def __init__(self, dist='Iso_Gaussian', L=5, N=64, kJ=1e-3, compute_acc=False, TU=1):
         '''
         dist(str)       : Distribution type
         L   (scalar)    : Length of the box
         N   (scalar)    : Number of grid points in each dimension
         kJ  (scalar)    : Jeans wavelength = 2 (pi G rho)^(1/4) * m^1/2
+        TU  (scalar)    : Total simulation time unit [L^2/ pi]
         '''
         self.kJ = kJ
+        self.TU = TU
 
         self.set_grid(L, N)
         self.set_steps()
@@ -67,7 +69,7 @@ class ULDM_Simulator():
         self.invK2 = np.divide(1, self.K2, out=np.zeros((self.N, self.N, self.N)), where=(self.K2 != 0))
     
     def set_steps(self):
-        self.T = self.L**2 / np.pi
+        self.T = self.L**2 / np.pi * self.TU
         self.nt = self.N**2
         self.dt = self.T / self.nt
 
